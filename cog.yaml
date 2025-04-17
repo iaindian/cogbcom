@@ -40,9 +40,6 @@ build:
     - requests
     - zipfile
 
-run:
-  - python setup_final.py
-  - python download_models.py
 
 predict: "predict.py:Predictor"
 # Optional: use a prebuilt comfy image if pushing to Replicate
