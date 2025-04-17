@@ -20,7 +20,8 @@ build:
     - huggingface-hub
     - scipy
     - psutil
-  run:
+  
+  commands:
     - python setup_comfy.py
     - python download_models.py
 
