@@ -21,9 +21,5 @@ build:
     - scipy
     - psutil
   
-  commands:
-    - python setup_comfy.py
-    - python download_models.py
-
 predict: "predict.py:Predictor"
 image: iaindian/berucomfy
