@@ -1,0 +1,7 @@
+cog predict --local \
+  -i image1=path/to/img1.png \
+  -i image2=path/to/img2.png \
+  -i image3=path/to/img3.png \
+  -i positive_prompt="smiling portrait" \
+  -i negative_prompt="blurry" \
+  -i bypass_reactor=true

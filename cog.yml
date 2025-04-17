@@ -1,0 +1,54 @@
+build:
+  gpu: true
+  python_version: "3.10"
+  python_packages:
+    - torch==2.1.0+cu121
+    - torchvision==0.16.0+cu121
+    - torchaudio==2.1.0+cu121
+    - --extra-index-url https://download.pytorch.org/whl/cu121
+    - xformers
+    - opencv-python
+    - requests
+    - tqdm
+    - numpy
+    - einops
+    - Pillow
+    - websocket-client
+    - torch
+    - torchsde
+    - torchvision
+    - torchaudio
+    - numpy>=1.25.0
+    - einops
+    - transformers>=4.28.1
+    - tokenizers>=0.13.3
+    - sentencepiece
+    - safetensors>=0.4.2
+    - aiohttp>=3.11.8
+    - yarl>=1.18.0
+    - pyyaml
+    - Pillow
+    - scipy
+    - tqdm
+    - psutil
+    - matplotlib
+    - scikit-image
+    - insightface
+    - gdown
+    - civitai
+    - huggingface‑hub
+    - requests
+    - zipfile
+
+run:
+  - python setup_final.py
+  - python download_models.py
+
+predict: "predict.py:Predictor"
+# Optional: use a prebuilt comfy image if pushing to Replicate
+# image: "r8.im/comfyanonymous/comfyui"
+
+# Optional runtime commands (if needed):
+# run:
+#   - git clone https://github.com/comfyanonymous/ComfyUI.git
+#   - pip install -r ComfyUI/requirements.txt
