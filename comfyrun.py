@@ -67,11 +67,11 @@ def inject_prompts_and_images(workflow, pos, neg, images):
             elif not neg_done:
                 inputs['text'] = neg
                 neg_done = True
-        elif cls == 'LoadImage' and img_idx < len(images):
-            inputs['path'] = images[img_idx]
-            # inputs['image'] = images[img_idx]
-            logging.debug(f"→ {node_id}: path ← {images[img_idx]}")
-            img_idx += 1
+            elif cls == 'LoadImage' and img_idx < len(images):
+                inputs['image'] = images[img_idx]
+                # inputs['image'] = images[img_idx]
+                logging.debug(f"→ {node_id}: path ← {images[img_idx]}")
+                img_idx += 1
     return workflow
 
 def strip_reactor_nodes(workflow):
