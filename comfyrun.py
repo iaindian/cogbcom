@@ -82,9 +82,27 @@ def strip_reactor_nodes(workflow):
     logging.info(f"Removed reactor nodes: {removed}")
     return workflow
 
+# def queue_workflow(workflow, host):
+#     url = f"{host.rstrip('/')}/prompt"
+#     resp = requests.post(url, json={'prompt': workflow, })
+#     if resp.status_code != 200:
+#         logging.error(f"POST /prompt → {resp.status_code} {resp.text}")
+#         resp.raise_for_status()
+#     pid = resp.json().get('prompt_id') or resp.json().get('id')
+#     if not pid:
+#         raise RuntimeError(f"No prompt_id returned: {resp.text}")
+#     logging.info(f"Queued, prompt_id={pid}")
+#     return pid
+
+
 def queue_workflow(workflow, host):
     url = f"{host.rstrip('/')}/prompt"
-    resp = requests.post(url, json={'prompt': workflow})
+    # tell ComfyUI exactly which node IDs to collect as outputs
+    payload = {
+        'prompt': workflow,
+        'outputs': ['203', '204'],   # your SaveImage node IDs
+    }
+    resp = requests.post(url, json=payload)
     if resp.status_code != 200:
         logging.error(f"POST /prompt → {resp.status_code} {resp.text}")
         resp.raise_for_status()
@@ -93,6 +111,7 @@ def queue_workflow(workflow, host):
         raise RuntimeError(f"No prompt_id returned: {resp.text}")
     logging.info(f"Queued, prompt_id={pid}")
     return pid
+
 
 def await_completion(prompt_id, host, interval, timeout):
     url = f"{host.rstrip('/')}/history/{prompt_id}"
