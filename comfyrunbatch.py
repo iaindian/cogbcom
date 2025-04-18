@@ -1,0 +1,209 @@
+#!/usr/bin/env python3
+import argparse
+import json
+import logging
+import os
+import time
+from pathlib import Path
+from urllib.parse import urlencode
+import argparse, copy, json, logging, time
+
+import requests
+
+def load_prompts(path):
+    with open(path, 'r', encoding='utf-8') as f:
+        data = json.load(f)
+    return data
+
+def find_input_images(input_dir):
+    p = Path(input_dir)
+    imgs = sorted(x.name for x in p.iterdir()
+                  if x.is_file() and x.suffix.lower() in ('.png','.jpg','.jpeg','.bmp','.webp'))
+    if not imgs:
+        raise FileNotFoundError(f"No images in {input_dir}")
+    return imgs
+
+def upload_images(images, input_dir, host):
+    """
+    POST each image file to /upload/image so the server stores it under ComfyUI/input.
+    According to the ComfyUI API, fields are:
+      - image: (filename, fileobj, mime)
+      - type: "input"
+      - overwrite: "true"
+    :contentReference[oaicite:2]{index=2}
+    """
+    url = f"{host.rstrip('/')}/upload/image"
+    for name in images:
+        fp = Path(input_dir) / name
+        with open(fp, 'rb') as f:
+            files = {
+                'image': (name, f, 'application/octet-stream')
+            }
+            data = {
+                'type': 'input',
+                'overwrite': 'true'
+            }
+            resp = requests.post(url, files=files, data=data)
+        try:
+            resp.raise_for_status()
+            logging.info(f"Uploaded {name}")
+        except Exception as e:
+            logging.error(f"Failed to upload {name}: {resp.status_code} {resp.text}")
+            raise
+
+def load_workflow(path):
+    with open(path, 'r', encoding='utf-8') as f:
+        return json.load(f)
+
+def inject_prompts_and_images(workflow, pos, neg, images):
+    """
+    Injects prompts into node 82 (Positive Prompt) and node 87 (Negative Prompt),
+    and sequentially assigns file paths to all LoadImage nodes.
+    
+    :param workflow: dict mapping node IDs to node definitions
+    :param pos:      positive prompt string
+    :param neg:      negative prompt string
+    :param images:   list of image file paths to load
+    :return:         modified workflow dict
+    """
+    img_idx = 0
+
+    for node_id, node in workflow.items():
+        inputs = node.setdefault('inputs', {})
+
+        # Inject only into node 82 and 87 for prompts
+        if node_id == "82":
+            inputs['wildcard_text'] = pos
+        elif node_id == "87":
+            inputs['wildcard_text'] = neg
+
+        # Inject images into LoadImage nodes
+        elif node.get('class_type') == 'LoadImage' and img_idx < len(images):
+            inputs['image'] = images[img_idx]
+            logging.debug(f"→ LoadImage node {node_id}: path ← {images[img_idx]}")
+            img_idx += 1
+
+    return workflow
+
+
+def strip_reactor_nodes(workflow):
+    removed = [nid for nid,n in workflow.items()
+               if n.get('class_type','').startswith('ReActor')]
+    for nid in removed:
+        del workflow[nid]
+    logging.info(f"Removed reactor nodes: {removed}")
+    return workflow
+
+
+
+def queue_workflow(workflow, host):
+    url = f"{host.rstrip('/')}/prompt"
+    # tell ComfyUI exactly which node IDs to collect as outputs
+    payload = {
+        'prompt': workflow,
+        'outputs': ['203', '204'],   # your SaveImage node IDs
+    }
+    resp = requests.post(url, json=payload)
+    if resp.status_code != 200:
+        logging.error(f"POST /prompt → {resp.status_code} {resp.text}")
+        resp.raise_for_status()
+    pid = resp.json().get('prompt_id') or resp.json().get('id')
+    if not pid:
+        raise RuntimeError(f"No prompt_id returned: {resp.text}")
+    logging.info(f"Queued, prompt_id={pid}")
+    return pid
+
+
+def await_completion(prompt_id, host, interval, timeout):
+    """
+    Poll /history until the graph has outputs, then
+    return a flat list of image‑descriptor dicts.
+    """
+    url = f"{host.rstrip('/')}/history/{prompt_id}"
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        r = requests.get(url)
+        r.raise_for_status()
+        data = r.json()
+        run = data.get(str(prompt_id), {})              # the inner dict
+        outputs = run.get('outputs', {})
+        # collect images once any node has them
+        images = []
+        for node_res in outputs.values():
+            images.extend(node_res.get('images', []))
+        if images:
+            logging.info(f"Got {len(images)} output images")
+            return images
+        time.sleep(interval)
+    raise TimeoutError(f"Prompt {prompt_id} timed out after {timeout}s")
+
+def download_outputs(images, host, out_dir):
+    """
+    Given a list of image‑descriptor dicts from await_completion(),
+    download each one into out_dir.
+    """
+    Path(out_dir).mkdir(parents=True, exist_ok=True)
+    for img in images:
+        params = {
+            'filename': img['filename'],
+            'subfolder': img.get('subfolder',''),
+            'type': img.get('type','output'),
+        }
+        url = f"{host.rstrip('/')}/view?{urlencode(params)}"
+        r = requests.get(url)
+        r.raise_for_status()
+        target = Path(out_dir) / img['filename']
+        target.write_bytes(r.content)
+        logging.info(f"Saved {target}")
+
+def main():
+    p = argparse.ArgumentParser()
+    p.add_argument("--api-json",    required=True)
+    p.add_argument("--prompt-file", required=True,
+                   help="JSON array of {id,positive,negative} objects")
+    p.add_argument("--input-dir",   default="input")
+    p.add_argument("--output-dir",  default="comfyui/output")
+    p.add_argument("--host",        default="http://127.0.0.1:8188")
+    p.add_argument("--bypass-reactor", action="store_true")
+    p.add_argument("--poll-interval", type=float, default=1.0)
+    p.add_argument("--timeout",       type=float, default=300.0)
+    p.add_argument("--log-level",     default="INFO")
+    args = p.parse_args()
+
+    logging.basicConfig(level=getattr(logging, args.log_level.upper()),
+                        format="%(asctime)s %(levelname)s %(message)s")
+
+    # Load prompt dicts with 'id', 'positive', 'negative'
+    prompts = load_prompts(args.prompt_file)
+    if not prompts:
+        raise RuntimeError("No prompts found")
+
+    # Upload images once
+    imgs = find_input_images(args.input_dir)
+    upload_images(imgs, args.input_dir, args.host)
+
+    base_wf = load_workflow(args.api_json)
+
+    for entry in prompts:
+        run_id = entry['id']
+        pos, neg = entry['positive'], entry['negative']
+        logging.info(f"=== Running prompt id={run_id} ===")
+
+        # fresh copy per run
+        wf = copy.deepcopy(base_wf)
+        wf = inject_prompts_and_images(wf, pos, neg, imgs)
+        if args.bypass_reactor:
+            wf = strip_reactor_nodes(wf)
+
+        pid = queue_workflow(wf, args.host)
+        images_info = await_completion(pid, args.host,
+                                       args.poll_interval, args.timeout)
+
+        # Use the prompt 'id' as folder name
+        out_dir = Path(args.output_dir) / run_id
+        download_outputs(images_info, args.host, str(out_dir))
+
+    logging.info("All runs complete.")
+
+if __name__ == "__main__":
+    main()
