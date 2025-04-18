@@ -532,7 +532,7 @@
   },
   "155": {
     "inputs": {
-      "image": "kj1.png"
+      "path": "kj1.png"
     },
     "class_type": "LoadImage",
     "_meta": {
@@ -541,7 +541,7 @@
   },
   "156": {
     "inputs": {
-      "image": "kj2.png"
+      "path": "kj2.png"
     },
     "class_type": "LoadImage",
     "_meta": {
@@ -550,7 +550,7 @@
   },
   "157": {
     "inputs": {
-      "image": "kj3.png"
+      "path": "kj3.png"
     },
     "class_type": "LoadImage",
     "_meta": {
