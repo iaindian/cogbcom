@@ -70,7 +70,7 @@ MODELS = [
   },
 
   {
-    "url": "https://drive.google.com/file/d/1vH4jXH3XPxe1qzSGZG6UJu8fEBZlycUt/view?usp=sharing",
+    "url": "https://huggingface.co/jagat334433/beru_custom/resolve/main/beru_custom_merge.safetensors",
     "filename": "beru_custom_merge.safetensors",
     "subdir": "checkpoints"
   },
