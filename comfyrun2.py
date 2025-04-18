@@ -72,9 +72,9 @@ def inject_prompts_and_images(workflow, pos, neg, images):
 
         # Inject only into node 82 and 87 for prompts
         if node_id == "82":
-            inputs['text'] = pos
+            inputs['wildcard_text'] = pos
         elif node_id == "87":
-            inputs['text'] = neg
+            inputs['wildcard_text'] = neg
 
         # Inject images into LoadImage nodes
         elif node.get('class_type') == 'LoadImage' and img_idx < len(images):
